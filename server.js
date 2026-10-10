@@ -144,4 +144,31 @@ wss.on('connection', (ws, req) => {
         send(ws, { type: 'idle' });
         break;
 
-      cas
+      case 'report': {
+        const target = ws.partner ? ws.partner.ip : ws.lastPartnerIp;
+        if (!target) return;
+        const count = (reportCounts.get(target) || 0) + 1;
+        reportCounts.set(target, count);
+        if (count >= REPORTS_TO_BAN) {
+          bans.set(target, Date.now() + BAN_MS);
+          for (const c of wss.clients) {
+            if (c.ip === target) {
+              send(c, { type: 'banned' });
+              c.close();
+            }
+          }
+        }
+        send(ws, { type: 'reported' });
+        break;
+      }
+    }
+  });
+
+  ws.on('close', () => {
+    removeFromQueue(ws);
+    disconnectPair(ws);
+    broadcastOnline();
+  });
+});
+
+server.listen(PORT, () => console.log(`Running on http://localhost:${PORT}`));
