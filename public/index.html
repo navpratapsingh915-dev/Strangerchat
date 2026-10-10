@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrangerChat</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --accent:#5b8cff; --text:#e8eaf0; --muted:#8a90a0; --me:#3a5bd9; --them:#262a34; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; display: flex; flex-direction: column; }
+  header { padding: 12px 16px; background: var(--panel); display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  #online { font-size: 13px; color: var(--muted); }
+  #status { padding: 8px 16px; font-size: 14px; color: var(--muted); text-align: center; }
+  #messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 78%; padding: 8px 12px; border-radius: 14px; line-height: 1.35; word-wrap: break-word; white-space: pre-wrap; }
+  .msg.me { align-self: flex-end; background: var(--me); }
+  .msg.them { align-self: flex-start; background: var(--them); }
+  .sys { align-self: center; font-size: 13px; color: var(--muted); }
+  #typing { height: 18px; padding: 0 16px; font-size: 12px; color: var(--muted); }
+  #controls { display: flex; gap: 8px; padding: 10px 16px; background: var(--panel); }
+  button { border: 0; border-radius: 10px; padding: 10px 14px; font-size: 15px; cursor: pointer; background: #2a2f3b; color: var(--text); }
+  button.primary { background: var(--accent); color: #fff; }
+  button.danger { background: #5a2430; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #input { flex: 1; min-width: 0; border: 0; border-radius: 10px; padding: 10px 12px; font-size: 15px; background: #222630; color: var(--text); }
+  #gate { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+  #gate .card { background: var(--panel); max-width: 420px; padding: 24px; border-radius: 16px; }
+  #gate h2 { margin-top: 0; }
+  #gate p, #gate li { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  #gate label { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="card">
+    <h2>Welcome to StrangerChat</h2>
+    <p>You'll be paired with a random stranger for an anonymous text chat.</p>
+    <ul>
+      <li>Never share personal info, passwords, or money details.</li>
+      <li>Be respectful. Harassment and explicit content are not allowed.</li>
+      <li>Use Report if someone misbehaves. Repeat offenders get banned.</li>
+    </ul>
+    <label><input type="checkbox" id="ageCheck"> I am 18 years or older and agree to the rules.</label>
+    <button class="primary" id="enter" disabled style="width:100%">Enter</button>
+  </div>
+</div>
+
+<header>
+  <h1>StrangerChat</h1>
+  <span id="online"></span>
+</header>
+<div id="status">Press Start to meet someone.</div>
+<div id="messages"></div>
+<div id="typing"></div>
+<div id="controls">
+  <button class="primary" id="startBtn">Start</button>
+  <input id="input" placeholder="Type a message..." maxlength="500" autocomplete="off" disabled>
+  <button id="sendBtn" disabled>Send</button>
+  <button class="danger" id="reportBtn" disabled>Report</button>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const messages = $('messages'), input = $('input'), statusEl = $('status');
+  let ws, state = 'idle', typingTimer, lastTypingSent = 0;
+
+  $('ageCheck').onchange = (e) => ($('enter').disabled = !e.target.checked);
+  $('enter').onclick = () => { $('gate').style.display = 'none'; connect(); };
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}`);
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'confirm_age', over18: true }));
+    ws.onclose = () => { setState('idle'); setStatus('Disconnected. Refresh to reconnect.'); };
+    ws.onmessage = (e) => handle(JSON.parse(e.data));
+  }
+
+  function handle(d) {
+    switch (d.type) {
+      case 'online': $('online').textContent = d.count + ' online'; break;
+      case 'waiting': setState('waiting'); setStatus('Looking for someone...'); break;
+      case 'matched': clearMessages(); setState('chatting'); setStatus('Connected to a stranger. Say hi!'); input.focus(); break;
+      case 'msg': addMsg(d.text, 'them'); $('typing').textContent = ''; break;
+      case 'typing':
+        $('typing').textContent = 'Stranger is typing...';
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => ($('typing').textContent = ''), 2000);
+        break;
+      case 'partner_left': setState('idle'); setStatus('Stranger left.'); addSys('Stranger disconnected.'); break;
+      case 'idle': setState('idle'); setStatus('Press Start to meet someone.'); break;
+      case 'reported': addSys('Report submitted. Thank you.'); break;
+      case 'error': addSys(d.message); break;
+      case 'banned': setState('idle'); setStatus('You are temporarily banned for repeated reports.'); break;
+    }
+  }
+
+  function setState(s) {
+    state = s;
+    const chatting = s === 'chatting';
+    input.disabled = !chatting;
+    $('sendBtn').disabled = !chatting;
+    $('reportBtn').disabled = !chatting;
+    $('startBtn').textContent = s === 'idle' ? 'Start' : 'Next';
+  }
+  function setStatus(t) { statusEl.textContent = t; }
+  function clearMessages() { messages.innerHTML = ''; }
+  function addMsg(text, who) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + who;
+    el.textContent = text;
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  function addSys(text) {
+    const el = document.createElement('div');
+    el.className = 'sys';
+    el.textContent = text;
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  $('startBtn').onclick = () => {
+    if (state === 'chatting') ws.send(JSON.stringify({ type: 'skip' }));
+    clearMessages();
+    ws.send(JSON.stringify({ type: 'find' }));
+  };
+
+  function sendMsg() {
+    const text = input.value.trim();
+    if (!text || state !== 'chatting') return;
+    ws.send(JSON.stringify({ type: 'msg', text }));
+    addMsg(text, 'me');
+    input.value = '';
+  }
+  $('sendBtn').onclick = sendMsg;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMsg(); });
+  input.addEventListener('input', () => {
+    const now = Date.now();
+    if (now - lastTypingSent > 1500 && state === 'chatting') {
+      ws.send(JSON.stringify({ type: 'typing' }));
+      lastTypingSent = now;
+    }
+  });
+
+  $('reportBtn').onclick = () => {
+    if (confirm('Report this stranger and end the chat?')) {
+      ws.send(JSON.stringify({ type: 'report' }));
+      ws.send(JSON.stringify({ type: 'skip' }));
+      setState('idle');
+      setStatus('Chat ended. Press Start to meet someone new.');
+    }
+  };
+</script>
+</body>
+</html>
