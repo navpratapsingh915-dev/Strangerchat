@@ -154,6 +154,11 @@
       setStatus('Chat ended. Press Start to meet someone new.');
     }
   };
-</script>
+  $('shareBtn').onclick = () => {
+    const url = location.origin;
+    const text = 'Chat with random strangers on StrangerChat: ' + url;
+    if (navigator.share) { navigator.share({ title: 'StrangerChat', text, url }).catch(() => {}); }
+    else { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); }
+  };
 </body>
 </html>
