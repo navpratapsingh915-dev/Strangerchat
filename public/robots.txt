@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://strangerchat-hc89.onrender.com/sitemap.xml
