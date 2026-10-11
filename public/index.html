@@ -111,7 +111,7 @@
   function addMsg(text, who) {
     const el = document.createElement('div');
     el.className = 'msg ' + who;
-    el.textContent = text;
+    el.textContent = text;           // textContent prevents HTML injection
     messages.appendChild(el);
     messages.scrollTop = messages.scrollHeight;
   }
@@ -154,11 +154,13 @@
       setStatus('Chat ended. Press Start to meet someone new.');
     }
   };
+
   $('shareBtn').onclick = () => {
     const url = location.origin;
     const text = 'Chat with random strangers on StrangerChat: ' + url;
     if (navigator.share) { navigator.share({ title: 'StrangerChat', text, url }).catch(() => {}); }
     else { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); }
   };
+</script>
 </body>
 </html>
