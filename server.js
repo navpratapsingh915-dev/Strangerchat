@@ -17,7 +17,7 @@ const MAX_REPORTS_PER_SOCKET = 5;
 const BAN_MS = 60 * 60 * 1000;
 
 // Replace/extend with a proper word list
-const BLOCKED_WORDS = ['badword1', 'badword2'];
+const BLOCKED_WORDS = require('./words');
 
 const app = express();
 app.disable('x-powered-by');
